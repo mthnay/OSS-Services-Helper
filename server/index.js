@@ -219,7 +219,7 @@ app.post('/send-email', authenticateToken, async (req, res) => {
             ${logoBase64 ? `<img src="${logoBase64}" width="150" style="display: block; margin-top: 20px;" alt="Troy Logo">` : ''}
         </div>
     `;
-    sendSmtpEmail.sender = { name: "OSS Services Helper", email: fromEmail };
+    sendSmtpEmail.sender = { name: "Troy Servis", email: fromEmail };
     sendSmtpEmail.to = [{ email: to }];
     sendSmtpEmail.cc = [{ email: 'servis.mavibahce@artitroy.com' }];
     
