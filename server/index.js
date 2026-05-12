@@ -232,8 +232,14 @@ app.post('/send-email', authenticateToken, async (req, res) => {
         console.log('Email sent via Brevo:', data);
         res.status(200).json({ success: true, message: 'Email başarıyla gönderildi!' });
     } catch (error) {
-        console.error('Brevo Error:', error);
-        res.status(500).json({ success: false, message: 'Email gönderilirken hata oluştu.', error: error.message });
+        // Brevo hata detaylarını yakala
+        const errorDetail = error.response && error.response.body ? error.response.body : error.message;
+        console.error('Brevo Error Detail:', errorDetail);
+        res.status(500).json({ 
+            success: false, 
+            message: 'Email gönderilirken hata oluştu.', 
+            error: typeof errorDetail === 'object' ? JSON.stringify(errorDetail) : errorDetail 
+        });
     }
 });
 
