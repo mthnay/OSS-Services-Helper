@@ -13,7 +13,7 @@ function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1400,
         height: 900,
-        title: 'Apple Service Helper',
+        title: 'OSS Services Helper',
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: false,

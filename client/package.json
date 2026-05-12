@@ -1,5 +1,5 @@
 {
-  "name": "apple-service-helper",
+  "name": "oss-services-helper",
   "private": true,
   "version": "1.0.0",
   "main": "electron.js",
@@ -14,7 +14,7 @@
   },
   "build": {
     "appId": "com.troyapr.servicehelper",
-    "productName": "Apple Service Helper",
+    "productName": "OSS Services Helper",
     "asar": false,
     "mac": {
       "target": "dmg",

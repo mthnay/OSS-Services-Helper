@@ -12,7 +12,7 @@ if (dns.setDefaultResultOrder) {
 }
 require('dotenv').config();
 
-const JWT_SECRET = process.env.JWT_SECRET || 'apple-service-helper-secret-key-123';
+const JWT_SECRET = process.env.JWT_SECRET || 'oss-services-helper-secret-key-123';
 const AUTH_FILE = process.env.USER_DATA_PATH
     ? path.join(process.env.USER_DATA_PATH, 'auth.json')
     : path.join(__dirname, 'auth.json');

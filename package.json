@@ -1,5 +1,5 @@
 {
-  "name": "apple-service-helper-web",
+  "name": "oss-services-helper-web",
   "version": "1.0.0",
   "scripts": {
     "install-all": "npm install && cd client && npm install && cd ../server && npm install",

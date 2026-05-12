@@ -50,7 +50,7 @@ const Login = () => {
                 </form>
                 
                 <div className="login-footer">
-                    <p>© 2026 Apple Service Helper</p>
+                    <p>© 2026 OSS Services Helper</p>
                 </div>
             </div>
         </div>
