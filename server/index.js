@@ -1,5 +1,5 @@
 const express = require('express');
-const { Resend } = require('resend');
+const Brevo = require('@getbrevo/brevo');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
@@ -156,30 +156,31 @@ app.delete('/delete-attachment', authenticateToken, async (req, res) => {
 
 // SMTP Bağlantı Testi (Korumalı)
 app.post('/test-connection', authenticateToken, async (req, res) => {
-    if (!process.env.RESEND_API_KEY) {
+    if (!process.env.BREVO_API_KEY) {
         return res.status(500).json({
             success: false,
-            message: 'RESEND_API_KEY bulunamadı. Lütfen sunucu ortam değişkenlerini (.env) kontrol edin.'
+            message: 'BREVO_API_KEY bulunamadı. Lütfen sunucu ortam değişkenlerini (.env) kontrol edin.'
         });
     }
 
-    res.status(200).json({ success: true, message: 'Resend API Key mevcut! Bağlantı başarılı.' });
+    res.status(200).json({ success: true, message: 'Brevo API Key mevcut! Bağlantı başarılı.' });
 });
 
 // E-posta gönderme endpoint'i (Korumalı)
 app.post('/send-email', authenticateToken, async (req, res) => {
     const { to, subject, text, auth } = req.body;
 
-    if (!process.env.RESEND_API_KEY) {
+    if (!process.env.BREVO_API_KEY) {
         return res.status(500).json({
             success: false,
-            message: 'RESEND_API_KEY bulunamadı. Sunucu yöneticisi ile iletişime geçin.'
+            message: 'BREVO_API_KEY bulunamadı. Sunucu yöneticisi ile iletişime geçin.'
         });
     }
 
-    const resend = new Resend(process.env.RESEND_API_KEY);
+    const apiInstance = new Brevo.TransactionalEmailsApi();
+    apiInstance.setApiKey(Brevo.TransactionalEmailsApiApiKeys.apiKey, process.env.BREVO_API_KEY);
 
-    // Ekleri hazırla (Resend için buffer gerekiyor)
+    // Ekleri hazırla (Brevo için Base64 gerekiyor)
     const attachments = [];
 
     // Önce assets klasöründeki sabit/varsayılan dosyaya bak
@@ -189,12 +190,12 @@ app.post('/send-email', authenticateToken, async (req, res) => {
     try {
         await fs.promises.access(defaultAttachmentPath);
         const fileBuffer = await fs.promises.readFile(defaultAttachmentPath);
-        attachments.push({ filename: 'Bilgilendirme.pdf', content: fileBuffer });
+        attachments.push({ name: 'Bilgilendirme.pdf', content: fileBuffer.toString('base64') });
     } catch {
         try {
             await fs.promises.access(uploadedAttachmentPath);
             const fileBuffer = await fs.promises.readFile(uploadedAttachmentPath);
-            attachments.push({ filename: 'Bilgilendirme.pdf', content: fileBuffer });
+            attachments.push({ name: 'Bilgilendirme.pdf', content: fileBuffer.toString('base64') });
         } catch {}
     }
 
@@ -209,33 +210,30 @@ app.post('/send-email', authenticateToken, async (req, res) => {
 
     const fromEmail = (auth && auth.user) ? auth.user : 'servis.mavibahce@artitroy.com';
 
+    let sendSmtpEmail = new Brevo.SendSmtpEmail();
+    sendSmtpEmail.subject = subject;
+    sendSmtpEmail.htmlContent = `
+        <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
+            ${text.replace(/\n/g, '<br>')}
+            <br><br>
+            ${logoBase64 ? `<img src="${logoBase64}" width="150" style="display: block; margin-top: 20px;" alt="Troy Logo">` : ''}
+        </div>
+    `;
+    sendSmtpEmail.sender = { name: "OSS Services Helper", email: fromEmail };
+    sendSmtpEmail.to = [{ email: to }];
+    sendSmtpEmail.cc = [{ email: 'servis.mavibahce@artitroy.com' }];
+    
+    if (attachments.length > 0) {
+        sendSmtpEmail.attachment = attachments;
+    }
+
     try {
-        const { data, error } = await resend.emails.send({
-            from: fromEmail,
-            to: to,
-            cc: 'servis.mavibahce@artitroy.com',
-            subject: subject,
-            text: text, // Fallback text
-            html: `
-                <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
-                    ${text.replace(/\n/g, '<br>')}
-                    <br><br>
-                    ${logoBase64 ? `<img src="${logoBase64}" width="150" style="display: block; margin-top: 20px;" alt="Troy Logo">` : ''}
-                </div>
-            `,
-            attachments: attachments.length > 0 ? attachments : undefined
-        });
-
-        if (error) {
-            console.error('Resend Error:', error);
-            return res.status(500).json({ success: false, message: 'Email gönderilirken hata oluştu.', error: error.message });
-        }
-
-        console.log('Email sent via Resend:', data);
+        const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
+        console.log('Email sent via Brevo:', data);
         res.status(200).json({ success: true, message: 'Email başarıyla gönderildi!' });
     } catch (error) {
-        console.error(error);
-        res.status(500).json({ success: false, message: 'Email gönderilirken sistemsel bir hata oluştu.', error: error.message });
+        console.error('Brevo Error:', error);
+        res.status(500).json({ success: false, message: 'Email gönderilirken hata oluştu.', error: error.message });
     }
 });
 
