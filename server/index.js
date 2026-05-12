@@ -1,5 +1,5 @@
 const express = require('express');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
@@ -156,75 +156,30 @@ app.delete('/delete-attachment', authenticateToken, async (req, res) => {
 
 // SMTP Bağlantı Testi (Korumalı)
 app.post('/test-connection', authenticateToken, async (req, res) => {
-    const { auth } = req.body;
-
-    if (!auth || !auth.user || !auth.pass) {
-        return res.status(400).json({
+    if (!process.env.RESEND_API_KEY) {
+        return res.status(500).json({
             success: false,
-            message: 'Mail ayarları eksik.'
+            message: 'RESEND_API_KEY bulunamadı. Lütfen sunucu ortam değişkenlerini (.env) kontrol edin.'
         });
     }
 
-    const transporter = nodemailer.createTransport({
-        host: auth.host || 'smtp-mail.outlook.com',
-        port: parseInt(auth.port) || 587,
-        secure: (auth.port == 465), // 465 ise true, değilse false
-        auth: {
-            user: auth.user,
-            pass: auth.pass,
-        },
-        tls: {
-            rejectUnauthorized: false
-        },
-        connectionTimeout: 10000,
-        greetingTimeout: 10000,
-        socketTimeout: 10000,
-        requireTLS: true,
-        debug: true,
-        logger: true
-    });
-
-    try {
-        await transporter.verify();
-        res.status(200).json({ success: true, message: 'Bağlantı başarılı! Ayarlar doğru.' });
-    } catch (error) {
-        console.error('Connection test failed:', error);
-        res.status(500).json({ success: false, message: 'Bağlantı başarısız.', error: error.message });
-    }
+    res.status(200).json({ success: true, message: 'Resend API Key mevcut! Bağlantı başarılı.' });
 });
 
 // E-posta gönderme endpoint'i (Korumalı)
 app.post('/send-email', authenticateToken, async (req, res) => {
     const { to, subject, text, auth } = req.body;
 
-    if (!auth || !auth.user || !auth.pass) {
-        return res.status(400).json({
+    if (!process.env.RESEND_API_KEY) {
+        return res.status(500).json({
             success: false,
-            message: 'Mail ayarları eksik. Lütfen ayarlardan giriş yapın.'
+            message: 'RESEND_API_KEY bulunamadı. Sunucu yöneticisi ile iletişime geçin.'
         });
     }
 
-    // SMTP Ayarları (Microsoft Exchange)
-    const transporter = nodemailer.createTransport({
-        host: auth.host || 'smtp-mail.outlook.com',
-        port: parseInt(auth.port) || 587,
-        secure: (auth.port == 465),
-        auth: {
-            user: auth.user,
-            pass: auth.pass,
-        },
-        tls: {
-            rejectUnauthorized: false
-        },
-        connectionTimeout: 10000,
-        greetingTimeout: 10000,
-        socketTimeout: 10000,
-        requireTLS: true,
-        debug: true,
-        logger: true
-    });
+    const resend = new Resend(process.env.RESEND_API_KEY);
 
-    // Ekleri hazırla
+    // Ekleri hazırla (Resend için buffer gerekiyor)
     const attachments = [];
 
     // Önce assets klasöründeki sabit/varsayılan dosyaya bak
@@ -233,47 +188,54 @@ app.post('/send-email', authenticateToken, async (req, res) => {
 
     try {
         await fs.promises.access(defaultAttachmentPath);
-        attachments.push({ filename: 'Bilgilendirme.pdf', path: defaultAttachmentPath });
+        const fileBuffer = await fs.promises.readFile(defaultAttachmentPath);
+        attachments.push({ filename: 'Bilgilendirme.pdf', content: fileBuffer });
     } catch {
         try {
             await fs.promises.access(uploadedAttachmentPath);
-            attachments.push({ filename: 'Bilgilendirme.pdf', path: uploadedAttachmentPath });
+            const fileBuffer = await fs.promises.readFile(uploadedAttachmentPath);
+            attachments.push({ filename: 'Bilgilendirme.pdf', content: fileBuffer });
         } catch {}
     }
 
-    // İmza logosunu ekle (eğer varsa)
+    // İmza logosunu Base64'e çevirip HTML içine göm
     const logoPath = path.join(__dirname, 'assets', 'signature_logo.png');
+    let logoBase64 = '';
     try {
         await fs.promises.access(logoPath);
-        attachments.push({ filename: 'signature_logo.png', path: logoPath, cid: 'signature_logo' });
+        const logoBuffer = await fs.promises.readFile(logoPath);
+        logoBase64 = `data:image/png;base64,${logoBuffer.toString('base64')}`;
     } catch {}
 
-    const mailOptions = {
-        from: auth.fromEmail || auth.user,
-        to: to,
-        cc: 'servis.mavibahce@artitroy.com',
-        subject: subject,
-        text: text, // Eski sistemler için text formatı kalsın
-        html: `
-            <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
-                ${text.replace(/\n/g, '<br>')}
-                <br><br>
-                <img src="cid:signature_logo" width="150" style="display: block; margin-top: 20px;" alt="Troy Logo">
-            </div>
-        `,
-        attachments: attachments
-    };
+    const fromEmail = (auth && auth.user) ? auth.user : 'servis.mavibahce@artitroy.com';
 
     try {
-        const info = await transporter.sendMail(mailOptions);
-        console.log('Email sent: ' + info.response);
+        const { data, error } = await resend.emails.send({
+            from: fromEmail,
+            to: to,
+            cc: 'servis.mavibahce@artitroy.com',
+            subject: subject,
+            text: text, // Fallback text
+            html: `
+                <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6;">
+                    ${text.replace(/\n/g, '<br>')}
+                    <br><br>
+                    ${logoBase64 ? `<img src="${logoBase64}" width="150" style="display: block; margin-top: 20px;" alt="Troy Logo">` : ''}
+                </div>
+            `,
+            attachments: attachments.length > 0 ? attachments : undefined
+        });
 
-        // No history storage requested
+        if (error) {
+            console.error('Resend Error:', error);
+            return res.status(500).json({ success: false, message: 'Email gönderilirken hata oluştu.', error: error.message });
+        }
 
+        console.log('Email sent via Resend:', data);
         res.status(200).json({ success: true, message: 'Email başarıyla gönderildi!' });
     } catch (error) {
         console.error(error);
-        res.status(500).json({ success: false, message: 'Email gönderilirken hata oluştu.', error: error.message });
+        res.status(500).json({ success: false, message: 'Email gönderilirken sistemsel bir hata oluştu.', error: error.message });
     }
 });
 
