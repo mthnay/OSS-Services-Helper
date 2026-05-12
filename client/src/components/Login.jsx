@@ -23,7 +23,7 @@ const Login = () => {
         <div className="login-container">
             <div className="login-card">
                 <div className="login-header">
-                    <div className="logo-icon"></div>
+                    <div className="logo-icon">OSS</div>
                     <h1>Servis Helper</h1>
                     <p>Hoş geldin, <strong>Metehan Ay</strong></p>
                     <p style={{ marginTop: '5px' }}>Devam etmek için şifreni gir</p>
